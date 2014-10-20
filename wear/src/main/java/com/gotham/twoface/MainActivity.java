@@ -1,12 +1,15 @@
 package com.gotham.twoface;
 
 import android.app.Activity;
+import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.support.wearable.view.BoxInsetLayout;
 import android.util.Log;
 import android.view.View;
-import android.view.animation.AccelerateDecelerateInterpolator;
-import android.animation.ObjectAnimator;
 import android.view.animation.Animation;
 import android.widget.ImageView;
 
@@ -26,6 +29,13 @@ public class MainActivity extends Activity {
 
     boolean isFlipping = false;
 
+    private SensorManager sensorManager;
+    private Sensor accelerometer;
+
+    private long lastUpdate = 0;
+    private float lastX, lastY, lastZ;
+    private static final float SHAKE_THRESHOLD = 600e-7f;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,21 +47,24 @@ public class MainActivity extends Activity {
         catCoinFront = (ImageView) findViewById(R.id.cat_coin_front);
         catCoinBack = (ImageView) findViewById(R.id.cat_coin_back);
 
-        catCoinFront.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
-                //setting a random speed. Change later
-                double duration = 75; //<=== this can be set by the accelerometer
-
-                Random random = new Random();
-                int randomizedAdditionalFlips = random.nextInt(10);
-
-                flipCoin(minNumFlips + randomizedAdditionalFlips, duration);
-
-            }
-        });
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
     }
+
+    @Override
+    protected void onResume()
+    {
+        super.onResume();
+        sensorManager.registerListener(accelerometerListener, accelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+    }
+
+    @Override
+    protected void onPause()
+    {
+        super.onPause();
+        sensorManager.unregisterListener(accelerometerListener);
+    }
+
     private void flipCoin(final int numFlips,  final double duration){
         FlipAnimation flipAnimation = new FlipAnimation(catCoinFront, catCoinBack, duration);
 
@@ -86,4 +99,45 @@ public class MainActivity extends Activity {
         }
         stub.startAnimation(flipAnimation);
     }
+
+    private SensorEventListener accelerometerListener = new SensorEventListener()
+    {
+        @Override
+        public void onSensorChanged(SensorEvent sensorEvent)
+        {
+            float x = sensorEvent.values[0];
+            float y = sensorEvent.values[1];
+            float z = sensorEvent.values[0];
+
+            long currentTime = sensorEvent.timestamp;
+
+            if ((currentTime - lastUpdate) > 100) {
+                long differenceTime = (currentTime - lastUpdate);
+                lastUpdate = currentTime;
+
+                float speed = Math.abs(x + y + z - lastX - lastY - lastZ) / differenceTime * 10000;
+                Log.e("SPEED", Float.toString(speed));
+
+                if (speed > SHAKE_THRESHOLD) {
+                    //setting a random speed. Change later
+                    double duration = 75; //<=== this can be set by the accelerometer
+
+                    Random random = new Random();
+                    int randomizedAdditionalFlips = random.nextInt(10);
+
+                    flipCoin(minNumFlips + randomizedAdditionalFlips, duration);
+                }
+
+                lastX = x;
+                lastY = y;
+                lastZ = z;
+            }
+        }
+
+        @Override
+        public void onAccuracyChanged(Sensor sensor, int i)
+        {
+
+        }
+    };
 }
